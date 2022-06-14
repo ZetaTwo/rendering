@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 ultraviolet = { version = "0.6", features = [ "f64" ] }
-show-image = "0.12.3"
+show-image = { version = "0.12.3", features = [ "save" ] }

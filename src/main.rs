@@ -4,44 +4,77 @@ use ultraviolet::DVec3;
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
 
-enum RaySphereIntersection {
+enum RaySphereIntersection<'a> {
     No,
-    Yes(f64),
+    Yes(&'a Sphere, f64),
 }
 
-fn ray_sphere_intersection(
+struct Sphere {
+    center: DVec3,
+    radius: f64,
+    color: DVec3,
+}
+
+impl Sphere {
+    fn new(center: DVec3, radius: f64, color: DVec3) -> Sphere {
+        Sphere {
+            center: center,
+            radius: radius,
+            color: color,
+        }
+    }
+}
+
+fn ray_sphere_intersection<'a>(
     ray_origin: &DVec3,
     ray: &DVec3,
-    sphere_center: &DVec3,
-    sphere_radius: &f64,
-) -> RaySphereIntersection {
-    let oc = *ray_origin - *sphere_center;
+    sphere: &'a Sphere,
+) -> RaySphereIntersection<'a> {
+    let oc = *ray_origin - sphere.center;
     let oc_dot_ray = ray.dot(oc);
-    let discriminant = oc_dot_ray * oc_dot_ray - (oc.mag_sq() - sphere_radius * sphere_radius);
+    let discriminant = oc_dot_ray * oc_dot_ray - (oc.mag_sq() - sphere.radius * sphere.radius);
     if discriminant < 0.0 {
         RaySphereIntersection::No
     } else {
         let d = -oc_dot_ray - discriminant.sqrt();
-        RaySphereIntersection::Yes(d)
+        RaySphereIntersection::Yes(sphere, d)
     }
 }
+
+const RED: DVec3 = DVec3::new(1.0, 0.0, 0.0);
+const GREEN: DVec3 = DVec3::new(0.0, 1.0, 0.0);
+const BLUE: DVec3 = DVec3::new(0.0, 0.0, 1.0);
 
 fn render_pixel(x: f64, y: f64) -> Vec<f64> {
     let ray_origin = DVec3::new(x, y, 0.0);
     let ray = DVec3::new(0.0, 0.0, 1.0);
-    let sphere_center = DVec3::new(0.3, 0.0, 5.0);
-    let sphere_radius = 0.5;
 
-    match ray_sphere_intersection(&ray_origin, &ray, &sphere_center, &sphere_radius) {
-        RaySphereIntersection::No => {
+    let spheres = vec![
+        Sphere::new(DVec3::new(0.3, 0.0, 5.0), 0.5, GREEN),
+        Sphere::new(DVec3::new(0.2, 0.2, 3.0), 0.2, BLUE),
+        Sphere::new(DVec3::new(-0.2, 0.0, 4.0), 0.3, RED),
+    ];
+
+    let mut intersections = spheres.iter().flat_map(|sphere| {
+        match ray_sphere_intersection(&ray_origin, &ray, &sphere) {
+            RaySphereIntersection::No => None,
+            RaySphereIntersection::Yes(sphere, d) => {
+                let intersection = ray_origin + d * ray;
+                Some((sphere, intersection))
+            }
+        }
+    }).collect::<Vec<_>>();
+    
+    intersections.sort_by(|(_, intersection_a), (_, intersection_b)| intersection_a.z.partial_cmp(&intersection_b.z).unwrap());
+
+    match intersections.get(0) {
+        None => {
             vec![0.0, 0.0, 0.1]
         }
-        RaySphereIntersection::Yes(d) => {
-            let intersection = ray_origin + d * ray;
-            let intersection_normal = (intersection - sphere_center).normalized();
+        Some((sphere, intersection)) => {
+            let intersection_normal = (*intersection - sphere.center).normalized();
             let shade = ray.dot(intersection_normal).abs();
-
-            vec![shade, 0.0, 0.0]
+            (shade*sphere.color).as_slice().into()
         }
     }
 }
